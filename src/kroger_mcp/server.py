@@ -68,6 +68,30 @@ def create_server() -> FastMCP:
         """
     )
 
+    # --- N8N COMPATIBILITY PATCH START ---
+    import functools
+    import inspect
+
+    def _n8n_compatible_tool(func):
+        """Wrapper to filter out n8n metadata parameters"""
+        @functools.wraps(func)
+        def wrapper(**all_kwargs):
+            # Get the function's signature
+            sig = inspect.signature(func)
+            # Only pass parameters the function expects
+            valid_params = {
+                k: v for k, v in all_kwargs.items() 
+                if k in sig.parameters 
+                and not k.startswith(('session', 'tool', 'chat', 'action'))
+            }
+            return func(**valid_params)
+        return wrapper
+
+    # Monkey patch the MCP instance's tool decorator
+    original_tool = mcp.tool
+    mcp.tool = lambda *args, **kwargs: _n8n_compatible_tool(original_tool(*args, **kwargs))
+    # --- N8N COMPATIBILITY PATCH END ---
+
     # Register all tools from the modules
     location_tools.register_tools(mcp)
     product_tools.register_tools(mcp)
@@ -86,8 +110,8 @@ def create_server() -> FastMCP:
 def main():
     """Main entry point for the Kroger MCP server"""
     mcp = create_server()
-    mcp.run()
-
+    # Changed from mcp.run() to support HTTP transport
+    mcp.run(transport="http", host="0.0.0.0", port=8000)
 
 if __name__ == "__main__":
     main()
